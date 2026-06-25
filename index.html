@@ -1,0 +1,1042 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>YUZ.AI — Intelligent Search</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={
+  darkMode:'class',
+  theme:{extend:{
+    colors:{
+      neon:{'50':'#f0fdf4','400':'#4ade80','500':'#22c55e'},
+      plasma:{'400':'#a78bfa','500':'#8b5cf6','600':'#7c3aed'},
+      cyan:{'400':'#22d3ee','500':'#06b6d4'}
+    },
+    fontFamily:{mono:['JetBrains Mono','Fira Code','monospace']},
+    animation:{
+      'pulse-slow':'pulse 3s cubic-bezier(0.4,0,0.6,1) infinite',
+      'slide-in':'slideIn 0.3s ease-out',
+      'fade-up':'fadeUp 0.4s ease-out'
+    },
+    keyframes:{
+      slideIn:{from:{opacity:'0',transform:'translateX(12px)'},to:{opacity:'1',transform:'translateX(0)'}},
+      fadeUp:{from:{opacity:'0',transform:'translateY(8px)'},to:{opacity:'1',transform:'translateY(0)'}}
+    }
+  }}
+}
+</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;overflow:hidden;}
+  body{font-family:'Inter',system-ui,sans-serif;background:#020408;}
+  .mono{font-family:'JetBrains Mono','Fira Code',monospace;}
+
+  /* scrollbars */
+  ::-webkit-scrollbar{width:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px;}
+
+  /* neon glow effects */
+  .glow-plasma{box-shadow:0 0 20px rgba(139,92,246,0.35);}
+  .glow-cyan{box-shadow:0 0 16px rgba(34,211,238,0.3);}
+  .text-glow{text-shadow:0 0 20px rgba(139,92,246,0.6);}
+
+  /* animated gradient border on input */
+  .grad-border{
+    background:linear-gradient(#0f172a,#0f172a) padding-box,
+    linear-gradient(135deg,#8b5cf6,#22d3ee,#8b5cf6) border-box;
+    border:1px solid transparent;
+  }
+  .grad-border:focus-within{
+    background:linear-gradient(#0f172a,#0f172a) padding-box,
+    linear-gradient(135deg,#a78bfa,#67e8f9,#a78bfa) border-box;
+    box-shadow:0 0 0 3px rgba(139,92,246,0.15);
+  }
+
+  /* chat bubble markdown-ish styling */
+  .ai-msg h2{font-size:1rem;font-weight:700;color:#e2e8f0;margin:14px 0 6px;}
+  .ai-msg h3{font-size:0.9rem;font-weight:600;color:#cbd5e1;margin:10px 0 4px;}
+  .ai-msg p{margin-bottom:10px;line-height:1.75;}
+  .ai-msg ul,.ai-msg ol{padding-left:18px;margin-bottom:10px;}
+  .ai-msg li{margin-bottom:4px;}
+  .ai-msg code{font-family:monospace;font-size:0.8rem;background:#1e293b;color:#7dd3fc;padding:1px 5px;border-radius:3px;}
+  .ai-msg pre{background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;overflow-x:auto;margin:10px 0;}
+  .ai-msg pre code{background:none;padding:0;}
+  .ai-msg strong{color:#f1f5f9;font-weight:600;}
+  .ai-msg em{color:#a5b4fc;}
+  .ai-msg blockquote{border-left:2px solid #7c3aed;padding-left:12px;color:#94a3b8;margin:8px 0;}
+
+  /* source card */
+  .source-card{transition:all 0.2s;}
+  .source-card:hover{transform:translateX(2px);}
+
+  /* typing cursor */
+  .typing-cursor::after{content:'▋';animation:blink 0.7s step-end infinite;color:#8b5cf6;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+  /* thinking dots */
+  .dot-bounce span{display:inline-block;animation:dotBounce 1.2s ease-in-out infinite;}
+  .dot-bounce span:nth-child(2){animation-delay:.2s;}
+  .dot-bounce span:nth-child(3){animation-delay:.4s;}
+  @keyframes dotBounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+
+  /* grid lines bg */
+  .grid-bg{
+    background-image:
+      linear-gradient(rgba(139,92,246,0.04) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(139,92,246,0.04) 1px,transparent 1px);
+    background-size:48px 48px;
+  }
+
+  /* toast */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:#1e293b;border:1px solid #334155;color:#e2e8f0;
+    font-size:0.75rem;padding:8px 18px;border-radius:8px;
+    z-index:9999;animation:fadeUp 0.3s ease;}
+</style>
+</head>
+<body class="dark grid-bg">
+<!-- ═══════════════════════════════════════════════
+     ROOT LAYOUT — full viewport split
+════════════════════════════════════════════════ -->
+<div class="flex h-screen w-screen overflow-hidden">
+
+  <!-- ══ LEFT PANEL — Chat ══ -->
+  <div class="flex flex-col w-full lg:w-[58%] h-full border-r border-slate-800/60 relative">
+
+    <!-- Top bar -->
+    <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-sm flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <!-- Logo mark -->
+        <div class="relative w-8 h-8 flex-shrink-0">
+          <div class="absolute inset-0 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 opacity-20 blur-sm"></div>
+          <div class="relative w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <span class="font-bold text-white tracking-tight text-lg leading-none">YUZ<span class="text-violet-400">.AI</span></span>
+          <div class="text-xs text-slate-500 mono leading-none mt-0.5">Intelligent Search Engine</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- Model selector -->
+        <div class="relative">
+          <select id="modelSelect" class="appearance-none bg-slate-900 border border-slate-700 text-slate-300 text-xs mono rounded-lg px-3 py-1.5 pr-7 cursor-pointer focus:outline-none focus:border-violet-500 transition-colors">
+            <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</option>
+            <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B</option>
+            <option value="mistralai/mistral-7b-instruct:free">Mistral 7B</option>
+            <option value="google/gemma-3-27b-it:free">Gemma 3 27B</option>
+            <option value="deepseek/deepseek-r1:free">DeepSeek R1</option>
+          </select>
+          <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <button id="newChatBtn" title="New Chat"
+          class="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+        </button>
+        <!-- API key button -->
+        <button id="apiKeyBtn" title="Set API Key"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-400 hover:text-slate-200 transition-all mono">
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+          </svg>
+          <span id="keyStatusLabel">Set Key</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages area -->
+    <div id="chatMessages" class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <!-- Welcome screen -->
+      <div id="welcomeScreen" class="flex flex-col items-center justify-center h-full pb-12 text-center">
+        <div class="relative mb-6">
+          <div class="absolute -inset-4 rounded-full bg-violet-600/10 blur-xl"></div>
+          <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center glow-plasma">
+            <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+          </div>
+        </div>
+        <h1 class="text-3xl font-bold text-white text-glow mb-2">Ask YUZ<span class="text-violet-400">.AI</span></h1>
+        <p class="text-slate-400 text-sm max-w-xs mb-8">Intelligent answers powered by AI with real-time source analysis</p>
+        <!-- Suggested questions -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md w-full">
+          <button class="suggest-btn text-left px-3.5 py-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 text-xs transition-all">
+            🚀 What is Retrieval-Augmented Generation?
+          </button>
+          <button class="suggest-btn text-left px-3.5 py-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 text-xs transition-all">
+            🧠 Explain LLM fine-tuning vs. RAG
+          </button>
+          <button class="suggest-btn text-left px-3.5 py-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 text-xs transition-all">
+            ⚡ How does vector search work?
+          </button>
+          <button class="suggest-btn text-left px-3.5 py-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 text-xs transition-all">
+            🌐 Best open-source AI models 2025
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div class="flex-shrink-0 px-4 pb-4 pt-2 bg-gradient-to-t from-slate-950 to-transparent">
+      <div class="grad-border rounded-2xl transition-all duration-300">
+        <div class="flex items-end gap-2 bg-slate-900/90 rounded-2xl px-4 py-3">
+          <textarea id="queryInput" rows="1"
+            placeholder="Ask anything… YUZ.AI will search and reason"
+            class="flex-1 bg-transparent resize-none text-slate-200 text-sm placeholder-slate-600 focus:outline-none leading-relaxed max-h-32 overflow-y-auto"
+            style="scrollbar-width:none;"></textarea>
+          <div class="flex items-center gap-2 flex-shrink-0 pb-0.5">
+            <!-- Search mode toggle -->
+            <button id="searchToggle"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs mono transition-all border border-slate-700 text-slate-400 hover:border-cyan-500/50 hover:text-cyan-400"
+              title="Toggle web search context">
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+              </svg>
+              <span id="searchToggleLabel">Search</span>
+            </button>
+            <!-- Send button -->
+            <button id="sendBtn"
+              class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white hover:from-violet-500 hover:to-cyan-400 transition-all glow-plasma disabled:opacity-40 disabled:cursor-not-allowed">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p class="text-center text-slate-700 text-xs mono mt-2">
+        Powered by OpenRouter · Free models available ·
+        <button onclick="showApiInfo()" class="text-violet-500 hover:underline">Setup guide</button>
+      </p>
+    </div>
+  </div>
+
+  <!-- ══ RIGHT PANEL — Sources & Research ══ -->
+  <div class="hidden lg:flex flex-col w-[42%] h-full bg-slate-950/50">
+
+    <!-- Right header -->
+    <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/60 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+        <span class="text-sm font-semibold text-slate-300">Sources & Research</span>
+      </div>
+      <span id="sourceCount" class="mono text-xs text-slate-600">0 sources</span>
+    </div>
+
+    <!-- Sources scroll area -->
+    <div id="sourcesPanel" class="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      <!-- Initial placeholder -->
+      <div id="sourcesPlaceholder" class="flex flex-col items-center justify-center h-full text-center pb-16">
+        <div class="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4">
+          <svg class="w-7 h-7 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+        <p class="text-slate-600 text-sm">Sources will appear here</p>
+        <p class="text-slate-700 text-xs mt-1">Ask a question to see referenced materials</p>
+      </div>
+    </div>
+
+    <!-- Research summary -->
+    <div id="researchSummary" class="hidden flex-shrink-0 border-t border-slate-800/60 p-4 bg-slate-950/80">
+      <div class="flex items-center gap-2 mb-2">
+        <svg class="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+        <span class="text-xs font-semibold text-slate-400 mono">QUERY ANALYSIS</span>
+      </div>
+      <div id="queryKeywords" class="flex flex-wrap gap-1.5"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ API KEY MODAL ═══ -->
+<div id="apiModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl" onclick="event.stopPropagation()">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-9 h-9 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
+        <svg class="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-white font-bold">Configure API Keys</h2>
+        <p class="text-slate-500 text-xs">Add at least one provider — all stored locally</p>
+      </div>
+    </div>
+    <div class="space-y-3">
+
+      <!-- Provider A: OpenRouter -->
+      <div>
+        <label class="flex items-center gap-2 text-xs text-slate-400 mb-1.5 mono">
+          <span class="w-4 h-4 rounded bg-violet-600/30 text-violet-300 flex items-center justify-center text-xs font-bold">A</span>
+          OPENROUTER KEY <span class="text-slate-600">(GPT-4o-mini / Claude-3-Haiku)</span>
+        </label>
+        <input id="apiKeyInput" type="password" placeholder="sk-or-v1-…"
+          class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-violet-500 transition-colors mono placeholder-slate-600"/>
+        <p class="text-slate-700 text-xs mt-1">Free at <span class="text-cyan-500">openrouter.ai</span> → Keys</p>
+      </div>
+
+      <!-- Provider B: Gemini -->
+      <div>
+        <label class="flex items-center gap-2 text-xs text-slate-400 mb-1.5 mono">
+          <span class="w-4 h-4 rounded bg-cyan-600/30 text-cyan-300 flex items-center justify-center text-xs font-bold">B</span>
+          GOOGLE GEMINI KEY <span class="text-slate-600">(gemini-1.5-flash fallback)</span>
+        </label>
+        <input id="geminiKeyInput" type="password" placeholder="AIzaSy…"
+          class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-500 transition-colors mono placeholder-slate-600"/>
+        <p class="text-slate-700 text-xs mt-1">Free at <span class="text-cyan-500">aistudio.google.com</span> → Get API key</p>
+      </div>
+
+      <!-- Provider C: Groq -->
+      <div>
+        <label class="flex items-center gap-2 text-xs text-slate-400 mb-1.5 mono">
+          <span class="w-4 h-4 rounded bg-amber-600/30 text-amber-300 flex items-center justify-center text-xs font-bold">C</span>
+          GROQ KEY <span class="text-slate-600">(Llama 3 — ultra-fast fallback)</span>
+        </label>
+        <input id="groqKeyInput" type="password" placeholder="gsk_…"
+          class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500 transition-colors mono placeholder-slate-600"/>
+        <p class="text-slate-700 text-xs mt-1">Free at <span class="text-cyan-500">console.groq.com</span> → API Keys</p>
+      </div>
+
+      <div class="flex gap-2 pt-1">
+        <button onclick="saveApiKey()" class="flex-1 bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-sm font-semibold py-2.5 rounded-xl hover:from-violet-500 hover:to-cyan-400 transition-all">
+          Save Keys
+        </button>
+        <button onclick="closeApiModal()" class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 text-sm transition-all">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// YUZ.AI — Core Application Logic
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// MULTI-PROVIDER CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+const PROVIDERS = [
+  {
+    id:    'openrouter',
+    label: 'OpenRouter (Llama 3.3 70B Free)',
+    url:   'https://openrouter.ai/api/v1/chat/completions',
+    getKey: () => localStorage.getItem('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') || '',
+    headers: (key) => ({
+      'Authorization': `Bearer ${key}`,
+      'Content-Type':  'application/json',
+      'HTTP-Referer':  location.origin,   // required by OpenRouter CORS policy
+      'X-Title':       'YUZ.AI'
+    }),
+    buildBody: (messages, stream) => ({
+      model:       'meta-llama/llama-3.3-70b-instruct:free', // always free on OR
+      messages,
+      stream,
+      temperature: 0.7,
+      max_tokens:  1024
+    }),
+    supportsStream:  true,
+    parseChunk:      (data) => JSON.parse(data).choices?.[0]?.delta?.content || '',
+    parseNonStream:  (json) => json.choices?.[0]?.message?.content || ''
+  },
+  {
+    id:    'groq',
+    label: 'Groq (Llama 3 — ultra fast)',
+    url:   'https://api.groq.com/openai/v1/chat/completions',
+    getKey: () => localStorage.getItem('yuz_groq_key') || '',
+    headers: (key) => ({
+      'Authorization': `Bearer ${key}`,
+      'Content-Type':  'application/json'
+    }),
+    buildBody: (messages, _stream) => ({
+      model:       'llama3-8b-8192',
+      messages,
+      stream:      false,   // always non-stream — avoids SSE CORS preflight
+      temperature: 0.7,
+      max_tokens:  1024
+    }),
+    parseNonStream: (json) => json.choices?.[0]?.message?.content || ''
+  },
+  {
+    id:    'gemini',
+    label: 'Google Gemini 1.5 Flash',
+    // URL is a function because the key goes in the query string (Gemini auth style)
+    url:   () => `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${localStorage.getItem('yuz_gemini_key') || ''}`,
+    getKey: () => localStorage.getItem('yuz_gemini_key') || '',
+    headers: () => ({ 'Content-Type': 'application/json' }),
+    buildBody: (messages) => {
+      // Gemini format: extract system text, map remaining to user/model turns
+      const systemMsg = messages.find(m => m.role === 'system');
+      const turns     = messages.filter(m => m.role !== 'system');
+      // Prepend system instruction as the first user turn if present
+      const contents = [
+        ...(systemMsg ? [{ role: 'user', parts: [{ text: systemMsg.content }] }] : []),
+        ...turns.map(m => ({
+          role:  m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }))
+      ];
+      // Gemini requires alternating user/model — merge consecutive same-role entries
+      const merged = contents.reduce((acc, cur) => {
+        const last = acc[acc.length - 1];
+        if (last && last.role === cur.role) {
+          last.parts.push(...cur.parts);
+        } else {
+          acc.push({ ...cur, parts: [...cur.parts] });
+        }
+        return acc;
+      }, []);
+      return {
+        contents: merged,
+        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+      };
+    },
+    supportsStream:  false,  // use REST — no SSE needed for Gemini in browser
+    parseNonStream:  (json) => {
+      if (json.error) throw new Error(json.error.message || 'Gemini API error');
+      return json.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+    }
+  }
+];
+
+// ── STATE ──────────────────────────────────────────────────────
+const STATE = {
+  apiKey:       localStorage.getItem('yuz_api_key') || '',   // OpenRouter key
+  model:        'openai/gpt-4o-mini',
+  searchMode:   true,
+  loading:      false,
+  history:      [],
+  sources:      [],
+  activeProvider: null   // tracks which provider won the current request
+};
+
+// ── DOM REFS ───────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const qInput      = $('queryInput');
+const sendBtn     = $('sendBtn');
+const chatMsgs    = $('chatMessages');
+const sourcesPanel= $('sourcesPanel');
+const searchToggle= $('searchToggle');
+
+// ── BOOT ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateKeyStatus();
+  updateSearchToggle();
+
+  // Enter to send (Shift+Enter = newline)
+  qInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  });
+
+  // Auto-resize textarea
+  qInput.addEventListener('input', () => {
+    qInput.style.height = 'auto';
+    qInput.style.height = Math.min(qInput.scrollHeight, 128) + 'px';
+  });
+
+  // Buttons
+  sendBtn.addEventListener('click', handleSend);
+  $('newChatBtn').addEventListener('click', newChat);
+  $('apiKeyBtn').addEventListener('click', () => {
+    // Pre-fill placeholders to show which keys are already set
+    if (localStorage.getItem('yuz_api_key'))    $('apiKeyInput').placeholder    = '••••••••• (set)';
+    if (localStorage.getItem('yuz_gemini_key')) $('geminiKeyInput').placeholder = '••••••••• (set)';
+    if (localStorage.getItem('yuz_groq_key'))   $('groqKeyInput').placeholder   = '••••••••• (set)';
+    $('apiModal').classList.remove('hidden');
+  });
+  $('modelSelect').addEventListener('change', e => { STATE.model = e.target.value; });
+  searchToggle.addEventListener('click', () => {
+    STATE.searchMode = !STATE.searchMode;
+    updateSearchToggle();
+  });
+
+  // Suggested questions
+  document.querySelectorAll('.suggest-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      qInput.value = btn.textContent.trim();
+      handleSend();
+    });
+  });
+
+  // Close modal on backdrop
+  $('apiModal').addEventListener('click', closeApiModal);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeApiModal();
+  });
+});
+
+// ── API KEY MANAGEMENT ─────────────────────────────────────────
+function saveApiKey() {
+  // Persist whichever keys were filled — empty inputs are ignored
+  const orKey     = $('apiKeyInput').value.trim();
+  const geminiKey = $('geminiKeyInput').value.trim();
+  const groqKey   = $('groqKeyInput').value.trim();
+
+  if (!orKey && !geminiKey && !groqKey) {
+    showToast('Enter at least one API key'); return;
+  }
+  if (orKey)     { STATE.apiKey = orKey; localStorage.setItem('yuz_api_key',    orKey);     }
+  if (geminiKey) {                        localStorage.setItem('yuz_gemini_key', geminiKey); }
+  if (groqKey)   {                        localStorage.setItem('yuz_groq_key',   groqKey);   }
+
+  updateKeyStatus();
+  closeApiModal();
+  const count = [orKey, geminiKey, groqKey].filter(Boolean).length;
+  showToast(`${count} key${count > 1 ? 's' : ''} saved ✓`, 'success');
+}
+
+function closeApiModal() {
+  $('apiModal').classList.add('hidden');
+  // Pre-fill inputs if keys already set (so user can see/replace them)
+  const or = $('apiKeyInput');
+  const gm = $('geminiKeyInput');
+  const gq = $('groqKeyInput');
+  if (or && localStorage.getItem('yuz_api_key'))    or.placeholder    = '••••••••••••• (set)';
+  if (gm && localStorage.getItem('yuz_gemini_key')) gm.placeholder    = '••••••••••••• (set)';
+  if (gq && localStorage.getItem('yuz_groq_key'))   gq.placeholder    = '••••••••••••• (set)';
+}
+
+function showApiInfo() {
+  $('apiModal').classList.remove('hidden');
+}
+
+function updateKeyStatus() {
+  const hasAny = !!(STATE.apiKey || localStorage.getItem('yuz_gemini_key') || localStorage.getItem('yuz_groq_key'));
+  const count  = [
+    localStorage.getItem('yuz_api_key'),
+    localStorage.getItem('yuz_gemini_key'),
+    localStorage.getItem('yuz_groq_key')
+  ].filter(Boolean).length;
+
+  $('keyStatusLabel').textContent = hasAny ? `✓ ${count} Key${count > 1 ? 's' : ''}` : 'Set Key';
+  $('apiKeyBtn').className = hasAny
+    ? 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-900/30 hover:bg-green-900/50 border border-green-700/50 text-xs text-green-400 transition-all mono'
+    : 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-400 hover:text-slate-200 transition-all mono';
+}
+function updateSearchToggle() {
+  searchToggle.className = STATE.searchMode
+    ? 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs mono transition-all border border-cyan-500/50 bg-cyan-500/10 text-cyan-400'
+    : 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs mono transition-all border border-slate-700 text-slate-500';
+  $('searchToggleLabel').textContent = STATE.searchMode ? 'Search ON' : 'Search';
+}
+
+// ── SEND & MAIN FLOW ───────────────────────────────────────────
+async function handleSend() {
+  const query = qInput.value.trim();
+  if (!query || STATE.loading) return;
+
+  if (!STATE.apiKey && !localStorage.getItem('yuz_gemini_key') && !localStorage.getItem('yuz_groq_key')) {
+    $('apiModal').classList.remove('hidden');
+    showToast('Set at least one API key to continue');
+    return;
+  }
+
+  // Hide welcome screen on first message
+  const ws = $('welcomeScreen');
+  if (ws) ws.remove();
+
+  // Reset input
+  qInput.value = '';
+  qInput.style.height = 'auto';
+  STATE.loading = true;
+  sendBtn.disabled = true;
+
+  // 1. Add user bubble
+  appendUserMessage(query);
+  scrollToBottom();
+
+  // 2. Generate search sources (simulated + enriched)
+  let sources = [];
+  let contextBlock = '';
+  if (STATE.searchMode) {
+    const { sources: srcs, context } = await simulateSearch(query);
+    sources = srcs;
+    contextBlock = context;
+    renderSources(srcs, query);
+  }
+
+  // 3. Build prompt with source context
+  const systemPrompt = buildSystemPrompt(query, contextBlock);
+
+  // 4. Create AI bubble and stream response
+  const { bubble, contentDiv } = appendAIBubble();
+  scrollToBottom();
+
+  try {
+    await generateAIResponse(systemPrompt, query, contentDiv);
+  } catch (err) {
+    contentDiv.innerHTML = `<p class="text-red-400 text-sm">${escHtml(err.message)}</p>`;
+  }
+
+  STATE.loading = false;
+  sendBtn.disabled = false;
+  scrollToBottom();
+}
+
+// ── SIMULATED SEARCH ENGINE ────────────────────────────────────
+// Extracts keywords, builds realistic source URLs, and creates
+// a context block to inject into the AI prompt (RAG-style).
+async function simulateSearch(query) {
+  const keywords = extractKeywords(query);
+  renderKeywords(keywords);
+
+  // ── Source database (domain → categories) ──
+  const DOMAIN_DB = {
+    ai:         ['arxiv.org','huggingface.co','ai.meta.com','openai.com','anthropic.com','deepmind.google'],
+    tech:       ['techcrunch.com','wired.com','arstechnica.com','theverge.com','ieee.org'],
+    code:       ['github.com','stackoverflow.com','developer.mozilla.org','docs.python.org'],
+    research:   ['scholar.google.com','semanticscholar.org','researchgate.net','nature.com'],
+    news:       ['reuters.com','bbc.com/technology','zdnet.com','infoq.com'],
+    cloud:      ['cloud.google.com','aws.amazon.com','azure.microsoft.com','kubernetes.io'],
+    data:       ['towardsdatascience.com','kaggle.com','paperswithcode.com','mlflow.org']
+  };
+
+  // Classify query and pick relevant domains
+  const category = classifyQuery(keywords);
+  const domains  = [...(DOMAIN_DB[category] || DOMAIN_DB.tech), ...DOMAIN_DB.research.slice(0,2)];
+
+  // Generate 5-7 plausible source objects
+  const count = Math.floor(Math.random() * 3) + 5;
+  const shuffledDomains = domains.sort(() => 0.5 - Math.random()).slice(0, count);
+
+  const sources = shuffledDomains.map((domain, i) => {
+    const slug    = keywords.slice(0, 2).join('-').toLowerCase().replace(/\s+/g, '-') || 'overview';
+    const year    = 2024 + Math.floor(Math.random() * 2);
+    const titles  = generateTitles(query, domain, i);
+    const snippet = generateSnippet(query, domain);
+    return {
+      id:      i + 1,
+      domain,
+      url:     `https://${domain}/${slug}`,
+      title:   titles,
+      snippet,
+      date:    `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Math.floor(Math.random()*12)]} ${year}`,
+      favicon: `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
+    };
+  });
+
+  // Build context block for AI prompt (RAG)
+  const context = sources.map((s, i) =>
+    `[Source ${i+1}] ${s.title}\nURL: ${s.url}\nContext: ${s.snippet}`
+  ).join('\n\n');
+
+  // Simulate brief search delay
+  await delay(600 + Math.random() * 400);
+
+  return { sources, context };
+}
+
+function classifyQuery(keywords) {
+  const kw = keywords.join(' ').toLowerCase();
+  if (/\b(ai|llm|gpt|neural|machine learning|deep learning|transformer|model|inference|embedding|vector|rag|fine-tun)\b/.test(kw)) return 'ai';
+  if (/\b(kubernetes|docker|cloud|aws|azure|gcp|devops|microservice|api|backend)\b/.test(kw)) return 'cloud';
+  if (/\b(python|javascript|rust|typescript|code|github|library|framework|package)\b/.test(kw)) return 'code';
+  if (/\b(research|paper|study|analysis|survey|arxiv)\b/.test(kw)) return 'research';
+  if (/\b(data|dataset|analytics|database|sql|nosql|spark)\b/.test(kw)) return 'data';
+  if (/\b(news|company|startup|fund|revenue|market|product)\b/.test(kw)) return 'news';
+  return 'tech';
+}
+
+function extractKeywords(query) {
+  const stopWords = new Set(['what','is','the','a','an','how','why','when','where','does','do','are','was','were','will','can','should','would','could','in','on','at','to','for','of','and','or','but','with','about','from']);
+  return query.toLowerCase()
+    .replace(/[?!.,;:'"]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopWords.has(w))
+    .slice(0, 6);
+}
+
+function generateTitles(query, domain, idx) {
+  const kw = query.split(' ').slice(0, 3).join(' ');
+  const templates = [
+    `Understanding ${kw}: A Comprehensive Guide`,
+    `${kw}: Latest Research and Applications`,
+    `Deep Dive into ${kw} — ${new Date().getFullYear()} Update`,
+    `${kw} Explained: From Theory to Practice`,
+    `The Complete Overview of ${kw}`,
+    `${kw}: Challenges, Solutions & Future Directions`,
+    `Practical Guide to ${kw} with Examples`
+  ];
+  return templates[idx % templates.length];
+}
+
+function generateSnippet(query, domain) {
+  const kw = query.split(' ').slice(0,4).join(' ');
+  const snippets = [
+    `This resource provides a thorough exploration of ${kw}, including core principles, real-world use cases, and the latest developments in the field.`,
+    `An authoritative analysis of ${kw} covering technical architecture, implementation strategies, and performance benchmarks from leading practitioners.`,
+    `Detailed documentation and examples demonstrating how ${kw} works in production environments, with code samples and best practices.`,
+    `Research findings and empirical data on ${kw}, examining both theoretical foundations and practical applications in industry settings.`,
+    `Community-driven resource with tutorials, discussions, and case studies focused on ${kw} and related technologies.`
+  ];
+  return snippets[Math.floor(Math.random() * snippets.length)];
+}
+
+// ── BUILD SYSTEM PROMPT ────────────────────────────────────────
+function buildSystemPrompt(query, contextBlock) {
+  const base = `You are YUZ.AI, an intelligent research assistant similar to Perplexity AI. You provide accurate, well-structured, and cited answers. Format your responses using markdown: use **bold** for key terms, ## for main sections, - for lists, and > for important quotes or notes. Be comprehensive but concise.`;
+  if (!contextBlock) return base;
+  return `${base}\n\nYou have access to the following research sources for this query:\n\n${contextBlock}\n\nInstructions:\n- Reference sources using [1], [2], etc. inline where relevant\n- Structure your answer with clear sections\n- Synthesize information across sources\n- Acknowledge if something is uncertain`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MULTI-PROVIDER AI ENGINE — generateAIResponse()
+// ─ All requests use stream:false (JSON response, no SSE).
+// ─ SSE is disabled because file:// origins and some proxies
+//   block EventStream responses; plain JSON is universally safe.
+// ─ Provider order: OpenRouter → Groq → Gemini
+// ═══════════════════════════════════════════════════════════════
+async function generateAIResponse(systemPrompt, userQuery, contentDiv) {
+
+  STATE.history.push({ role: 'user', content: userQuery });
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...STATE.history.slice(-8)
+  ];
+
+  const availableProviders = PROVIDERS.filter(p => p.getKey().length > 0);
+  if (!availableProviders.length) {
+    throw new Error('No API keys set. Click "Set Key" and add at least one provider key.');
+  }
+
+  let lastError = null;
+
+  for (const provider of availableProviders) {
+    try {
+      updateProviderStatus(contentDiv, provider.label, 'connecting');
+
+      const key  = provider.getKey();
+      // Resolve URL (Gemini passes key as query param via function)
+      const url  = typeof provider.url === 'function' ? provider.url() : provider.url;
+      // Always non-streaming — avoids SSE CORS/preflight issues entirely
+      const body = JSON.stringify(provider.buildBody(messages, false));
+
+      console.info(`[YUZ.AI] Trying ${provider.label} → ${url}`);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 25000);
+
+      // Route through AllOrigins proxy to bypass CORS restrictions on
+      // localhost / GitHub Pages when calling external AI APIs directly.
+      const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+
+      const res = await fetch(proxyUrl, {
+        method:  'POST',
+        headers: {
+          ...provider.headers(key),
+          'Content-Type': 'application/json'   // ensure Content-Type survives proxy
+        },
+        body
+      });
+      clearTimeout(timer);
+
+      // Read raw text first — safe even if Content-Type header is wrong
+      const rawText = await res.text();
+
+      if (!res.ok) {
+        // Try to extract a readable error message from the JSON body
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const errJson = JSON.parse(rawText);
+          errMsg = errJson?.error?.message
+                || errJson?.error?.status
+                || errJson?.message
+                || errMsg;
+        } catch {}
+        throw new Error(`${provider.id}: ${errMsg}`);
+      }
+
+      // Parse the successful JSON response
+      let json;
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        throw new Error(`${provider.id}: response was not valid JSON`);
+      }
+
+      // Extract the text via provider-specific parser
+      const text = provider.parseNonStream(json);
+      if (!text || !text.trim()) {
+        throw new Error(`${provider.id}: empty response — model may be unavailable`);
+      }
+
+      // ── Render with typewriter effect ──────────────────────
+      STATE.activeProvider = provider.id;
+      contentDiv.innerHTML = '';
+      contentDiv.classList.add('typing-cursor');
+      await typewriterRender(text, contentDiv);
+      contentDiv.classList.remove('typing-cursor');
+
+      STATE.history.push({ role: 'assistant', content: text });
+      markProviderSuccess(contentDiv, provider);
+      return; // success — stop trying other providers
+
+    } catch (err) {
+      lastError = err;
+      if (err.name === 'AbortError') {
+        console.warn(`[YUZ.AI] ${provider.label} timed out (25s)`);
+        updateProviderStatus(contentDiv, provider.label, 'timeout');
+      } else {
+        console.warn(`[YUZ.AI] ${provider.label} failed:`, err.message);
+        updateProviderStatus(contentDiv, provider.label, 'error', err.message);
+      }
+      await delay(600);
+    }
+  }
+
+  throw lastError || new Error('All providers failed. Check console for details.');
+}
+
+// ── TYPEWRITER RENDERER ────────────────────────────────────────
+// Renders text progressively using requestAnimationFrame —
+// gives the streaming feel without actual SSE.
+async function typewriterRender(text, contentDiv) {
+  const chars = [...text];                                   // Unicode-safe
+  const step  = Math.max(1, Math.ceil(chars.length / 150)); // ~150 RAF ticks
+  let i       = 0;
+
+  return new Promise(resolve => {
+    function tick() {
+      if (i >= chars.length) {
+        contentDiv.innerHTML = renderMarkdown(text); // final full render
+        scrollToBottom();
+        resolve();
+        return;
+      }
+      i = Math.min(i + step, chars.length);
+      contentDiv.innerHTML = renderMarkdown(chars.slice(0, i).join(''));
+      scrollToBottom();
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+// ── PROVIDER STATUS UI ─────────────────────────────────────────
+function updateProviderStatus(contentDiv, label, state, detail) {
+  const colors = {
+    connecting: 'text-cyan-400',
+    timeout:    'text-amber-400',
+    error:      'text-red-400'
+  };
+  const icons = {
+    connecting: `<svg class="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>`,
+    timeout:    `<span class="mr-1">⏱</span>`,
+    error:      `<span class="mr-1">⚠</span>`
+  };
+  const detailHtml = detail
+    ? `<span class="block text-slate-600 text-xs mt-0.5 font-normal mono">${escHtml(detail)}</span>`
+    : '';
+  contentDiv.innerHTML = `
+    <div class="flex items-center flex-wrap gap-1 ${colors[state]} text-xs font-medium mono">
+      ${icons[state]}${escHtml(label)}
+      ${state !== 'connecting' ? '<span class="text-slate-600">→ trying next provider…</span>' : ''}
+      ${detailHtml}
+    </div>`;
+}
+
+function markProviderSuccess(contentDiv, provider) {
+  // Inject a tiny "answered by" badge after the response renders
+  const badge = document.createElement('div');
+  badge.className = 'flex items-center gap-1.5 mt-3 pt-2 border-t border-slate-800/60';
+  badge.innerHTML = `
+    <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+    <span class="text-xs text-slate-700 mono">answered by ${escHtml(provider.label)}</span>`;
+  // Append after a tick so content is already rendered
+  setTimeout(() => {
+    if (contentDiv.parentElement) contentDiv.parentElement.appendChild(badge);
+  }, 100);
+}
+
+// ── MARKDOWN RENDERER ──────────────────────────────────────────
+function renderMarkdown(md) {
+  return md
+    // code blocks
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code class="language-${lang}">${escHtml(code.trim())}</code></pre>`)
+    // inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // h2, h3
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    // bold, italic
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // blockquote
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    // source citations [1], [2] etc
+    .replace(/\[(\d+)\]/g, '<sup class="text-cyan-400 text-xs font-bold cursor-default" title="Source $1">[$1]</sup>')
+    // unordered lists
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)(?![\s\S]*<li>)/g, s => `<ul>${s}</ul>`)
+    // paragraphs
+    .split('\n\n')
+    .map(block => {
+      block = block.trim();
+      if (!block) return '';
+      if (/^<(h[23]|pre|ul|blockquote)/.test(block)) return block;
+      return `<p>${block.replace(/\n/g, '<br/>')}</p>`;
+    })
+    .join('\n');
+}
+
+// ── RENDER SOURCES PANEL ───────────────────────────────────────
+function renderSources(sources, query) {
+  STATE.sources = sources;
+  const placeholder = $('sourcesPlaceholder');
+  if (placeholder) placeholder.remove();
+  $('sourceCount').textContent = `${sources.length} sources`;
+  $('researchSummary').classList.remove('hidden');
+
+  // Add query header in sources panel
+  const header = document.createElement('div');
+  header.className = 'mb-2 pb-2 border-b border-slate-800/60';
+  header.innerHTML = `
+    <p class="text-xs text-slate-600 mono mb-1">QUERY</p>
+    <p class="text-sm text-slate-400 font-medium">${escHtml(query)}</p>`;
+  sourcesPanel.insertBefore(header, sourcesPanel.firstChild);
+
+  // Render each source card with stagger animation
+  sources.forEach((src, i) => {
+    const card = document.createElement('a');
+    card.href   = src.url;
+    card.target = '_blank';
+    card.rel    = 'noopener noreferrer';
+    card.className = 'source-card block p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-violet-500/40 hover:bg-slate-800/70 transition-all no-underline';
+    card.style.animation = `fadeUp 0.35s ease both; animation-delay:${i * 60}ms`;
+    card.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0 mt-0.5">
+          <div class="w-6 h-6 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
+            <img src="${src.favicon}" class="w-4 h-4" onerror="this.style.display='none'" loading="lazy"/>
+          </div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="text-xs font-bold text-violet-400 mono w-5 flex-shrink-0">[${src.id}]</span>
+            <span class="text-xs text-slate-500 mono truncate">${src.domain}</span>
+            <span class="text-slate-700 text-xs">·</span>
+            <span class="text-xs text-slate-700">${src.date}</span>
+          </div>
+          <p class="text-sm text-slate-300 font-medium leading-snug mb-1 line-clamp-2">${escHtml(src.title)}</p>
+          <p class="text-xs text-slate-600 leading-relaxed line-clamp-2">${escHtml(src.snippet)}</p>
+        </div>
+      </div>`;
+    sourcesPanel.appendChild(card);
+  });
+}
+
+function renderKeywords(keywords) {
+  $('queryKeywords').innerHTML = keywords.map(kw =>
+    `<span class="px-2 py-0.5 rounded-full bg-violet-900/40 border border-violet-700/40 text-violet-300 text-xs mono">${escHtml(kw)}</span>`
+  ).join('');
+}
+
+// ── CHAT BUBBLE BUILDERS ───────────────────────────────────────
+function appendUserMessage(text) {
+  const el = document.createElement('div');
+  el.className = 'flex justify-end';
+  el.innerHTML = `
+    <div class="max-w-[80%] px-4 py-3 rounded-2xl rounded-tr-sm bg-gradient-to-br from-violet-700 to-violet-600 text-white text-sm leading-relaxed shadow-lg" style="animation:fadeUp 0.3s ease">
+      ${escHtml(text)}
+    </div>`;
+  chatMsgs.appendChild(el);
+}
+
+function appendAIBubble() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'flex items-start gap-3';
+  wrapper.style.animation = 'fadeUp 0.3s ease';
+  wrapper.innerHTML = `
+    <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center mt-0.5">
+      <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+      </svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-xs font-bold text-violet-400 mono">YUZ.AI</span>
+        <span class="text-xs text-slate-700" id="aiModelLabel">${STATE.model.split('/')[1]?.split(':')[0] || 'AI'}</span>
+      </div>
+      <div class="ai-msg text-slate-300 text-sm leading-relaxed" id="aiContent">
+        <div class="dot-bounce flex items-center gap-1 text-slate-600">
+          <span class="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block"></span>
+        </div>
+      </div>
+    </div>`;
+  chatMsgs.appendChild(wrapper);
+  const contentDiv = wrapper.querySelector('#aiContent');
+  // Remove id to prevent duplicates
+  contentDiv.removeAttribute('id');
+  return { bubble: wrapper, contentDiv };
+}
+
+// ── UTILITIES ──────────────────────────────────────────────────
+function newChat() {
+  STATE.history = [];
+  STATE.sources = [];
+  chatMsgs.innerHTML = `
+    <div id="welcomeScreen" class="flex flex-col items-center justify-center h-full pb-12 text-center">
+      <div class="relative mb-6">
+        <div class="absolute -inset-4 rounded-full bg-violet-600/10 blur-xl"></div>
+        <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center glow-plasma">
+          <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+        </div>
+      </div>
+      <h1 class="text-3xl font-bold text-white text-glow mb-2">Ask YUZ<span class="text-violet-400">.AI</span></h1>
+      <p class="text-slate-400 text-sm max-w-xs mb-8">Intelligent answers powered by AI with real-time source analysis</p>
+    </div>`;
+  sourcesPanel.innerHTML = `
+    <div id="sourcesPlaceholder" class="flex flex-col items-center justify-center h-full text-center pb-16">
+      <div class="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4">
+        <svg class="w-7 h-7 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      <p class="text-slate-600 text-sm">Sources will appear here</p>
+    </div>`;
+  $('sourceCount').textContent = '0 sources';
+  $('researchSummary').classList.add('hidden');
+  $('queryKeywords').innerHTML = '';
+  qInput.focus();
+}
+
+function scrollToBottom() {
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function showToast(msg, type = 'info') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = type === 'success' ? '#22c55e' : '#334155';
+  t.style.color       = type === 'success' ? '#86efac' : '#e2e8f0';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+</script>
+</body>
+</html>
